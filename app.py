@@ -1,14 +1,7 @@
 import os
 import sys
 
-# منع السيرفر من مراقبة الملفات لتفادي خطأ الـ inotify watch limit
-try:
-    if 'streamlit' in sys.modules:
-        import streamlit.web.cli as stcli
-except:
-    pass
-
-# حيلة برمجية ذكية لصب المكتبات الناقصة ديريكت عند التشغيل
+# حيلة برمجية ذكية لصب المكتبات الناقصة ديريكت عند التشغيل لتفادي الأخطاء
 try:
     import requests
     import pandas as pd
@@ -37,8 +30,8 @@ st.markdown("""
 st.title("👑 QUOTEX AI LIVE ALGO (TWELVE DATA - FIXED)")
 st.markdown("🔗 **إدارة الحساب:** `صفقات ثابتة آمنة 🛡️` | **مزود البيانات:** `Twelve Data Live 🟢` ")
 
-# 🔑 تثبيت الـ API المفعل الجديد
-API_KEY = "A272cbbc1bee42a49d19a1582631cc92"
+# 🔑 الـ API Key الجديد الخاص بك تم تحديثه هنا
+API_KEY = "F1e838f27fc1449c963781d9ccac52d7"
 
 # قائمة أزواج العملات الثمانية الكاملة
 pairs = {
