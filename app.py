@@ -14,23 +14,24 @@ st.markdown("""
     .buy-bg { background: linear-gradient(135deg, #11998e, #38ef7d); box-shadow: 0px 0px 20px #38ef7d; }
     .sell-bg { background: linear-gradient(135deg, #ff416c, #ff4b2b); box-shadow: 0px 0px 20px #ff4b2b; }
     .wait-bg { background: linear-gradient(135deg, #1e293b, #334155); box-shadow: 0px 0px 15px #334155; }
-    .live-indicator { background-color: #1e3a8a; color: #93c5fd; padding: 10px; border-radius: 8px; text-align: center; font-weight: bold; margin-bottom: 15px; }
 </style>
 """, unsafe_allow_html=True)
 
 st.title("👑 QUOTEX AI LIVE ALGO (TWELVE DATA)")
 st.markdown("🔗 **إدارة الحساب:** `صفقات ثابتة آمنة 🛡️` | **مزود البيانات:** `Twelve Data Live 🟢` ")
 
-# مفتاحك الصحيح والمفعل
-API_KEY = "De43c307396941f4a5a2cda2c51c3018"
+# 🔑 مفتاح الـ API الجديد والمفعل الخاص بك
+API_KEY = "Ecf6da3d1b1f45d19ddc3014737f8511"
 
-# قائمة الـ 6 أزواج عملات المتاحة متاعك
+# قائمة الـ 8 أزواج عملات المتاحة الحية متاعك كاملة
 pairs = {
     "EUR/USD (يورو / دولار)": "EUR/USD",
+    "GBP/USD (باوند / دولار)": "GBP/USD",
     "USD/JPY (دولار / ين)": "USD/JPY",
     "AUD/USD (أسترالي / دولار)": "AUD/USD",
     "EUR/GBP (يورو / باوند)": "EUR/GBP",
     "EUR/JPY (يورو / ين)": "EUR/JPY",
+    "GBP/JPY (باوند / ين)": "GBP/JPY",
     "USD/CAD (دولار / كندي)": "USD/CAD"
 }
 selected_display = st.selectbox("🎯 اختر زوج العملات لقراءة حركته الحية الآن:", list(pairs.keys()))
@@ -40,13 +41,16 @@ symbol = pairs[selected_display]
 st.sidebar.header("💵 إدارة رأس المال")
 fixed_bet = st.sidebar.number_input("🎯 قيمة الصفقة الثابتة ($):", min_value=1, value=5)
 
-# دالة جلب البيانات بطلب واحد خفيف وآمن لتفادي حظر السيرفر
+# دالة جلب البيانات مع فحص الأخطاء الدقيق
 def fetch_fast_data(sym, api_key):
     try:
-        # طلب واحد فقط يجيب آخر 20 شمعة
-        url = f"https://api.twelvedata.com/time_series?symbol={sym}&interval=1min&outputsize=20&apikey={api_key}"
+        url = f"https://api.twelvedata.com/time_series?symbol={sym}&interval=1min&outputsize=25&apikey={api_key}"
         response = requests.get(url).json()
         
+        # إذا السيرفر رجع خطأ واضح في المفتاح أو الليميت
+        if "status" in response and response["status"] == "error":
+            return None, None, f"❌ خطأ من سيرفر البيانات: {response['message']}"
+            
         if "values" in response:
             df_data = pd.DataFrame(response["values"])
             df_data["close"] = df_data["close"].astype(float)
@@ -54,7 +58,7 @@ def fetch_fast_data(sym, api_key):
             # السعر الحالي المباشر
             current_price = df_data["close"].iloc[0]
             
-            # حساب مؤشر RSI يدوياً داخل البوت لتفادي الـ Rate Limit
+            # حساب مؤشر RSI داخلياً لتفادي الـ Rate Limit
             delta = df_data["close"].iloc[::-1].diff()
             gain = delta.where(delta > 0, 0).rolling(window=14).mean().iloc[-1]
             loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean().iloc[-1]
@@ -65,16 +69,16 @@ def fetch_fast_data(sym, api_key):
                 rs = gain / loss
                 rsi_val = 100 - (100 / (1 + rs))
                 
-            return current_price, rsi_val, True
+            return current_price, rsi_val, "success"
         else:
-            return None, None, False
-    except:
-        return None, None, False
+            return None, None, "⚠️ السيرفر رجع استجابة فارغة، تفقد حالة المفتاح الجديد."
+    except Exception as e:
+        return None, None, f"❌ خطأ غير متوقع: {str(e)}"
 
-price, rsi, success = fetch_fast_data(symbol, API_KEY)
+price, rsi, status_message = fetch_fast_data(symbol, API_KEY)
 
-if success and price is not None:
-    st.success(f"📡 متصل بنجاح! | **السعر الحالي:** `{price:.5f}` | **RSI المحسوب لايف:** `{rsi:.2f}`")
+if status_message == "success" and price is not None:
+    st.success(f"📡 متصل بنجاح بالمفتاح الجديد! | **السعر الحالي:** `{price:.5f}` | **RSI المحسوب لايف:** `{rsi:.2f}`")
     
     if rsi < 35:
         signal_type = "CALL 🟢 (شراء فوراً)"
@@ -94,7 +98,8 @@ if success and price is not None:
         
     st.markdown(f'<div class="signal-card {bg_class}">🎯 التوصية الحية: {signal_type} <br><span style="font-size:17px;">⏱️ مدة الصفقة: {duration} | 🕒 التوقيت: {datetime.now().strftime("%H:%M:%S")} <br> 📝 التحليل الفني: {action_note}</span></div>', unsafe_allow_html=True)
 else:
-    st.warning("⚠️ جاري جلب الأسعار الحية من السيرفر... يرجى عمل ريفريش (Refresh) بعد ثوانٍ قليلة.")
+    # عرض رسالة الخطأ الحقيقية القادمة من السيرفر مباشرة لتسهيل الكشف
+    st.error(status_message)
 
 st.markdown("---")
 
