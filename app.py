@@ -1,6 +1,13 @@
 import os
 import sys
 
+# منع السيرفر من مراقبة الملفات لتفادي خطأ الـ inotify watch limit
+try:
+    if 'streamlit' in sys.modules:
+        import streamlit.web.cli as stcli
+except:
+    pass
+
 # حيلة برمجية ذكية لصب المكتبات الناقصة ديريكت عند التشغيل
 try:
     import requests
