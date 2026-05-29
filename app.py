@@ -6,7 +6,6 @@ from datetime import datetime
 # إعدادات واجهة المستخدم الاحترافية للأسواق الحية
 st.set_page_config(page_title="QUOTEX LIVE TWELVE AI", page_icon="👑", layout="wide")
 
-# تنسيق الألوان والخلفيات اللحظية
 st.markdown("""
 <style>
     .reportview-container { background: #0b0e14; }
@@ -41,17 +40,11 @@ symbol = pairs[selected_display]
 st.sidebar.header("💵 إدارة رأس المال")
 fixed_bet = st.sidebar.number_input("🎯 قيمة الصفقة الثابتة ($):", min_value=1, value=5)
 
-# دالة جلب البيانات مع إرسال الـ API Key في الـ Headers لفرض الحماية ومنع الرفض
+# دالة جلب البيانات مع إرسال الـ API Key بطريقة آمنة
 def fetch_safe_live_data(sym, api_key):
     try:
-        # الرابط نقي بدون معايير مكشوفة تفادياً لخطأ السيرفر
-        url = f"https://api.twelvedata.com/time_series?symbol={sym}&interval=1min&outputsize=15"
-        
-        # 🛡️ تمرير المفتاح في رأس الطلب الرسمي (Authorization Headers) لحل مشكلة incorrect or not specified
-        headers = {
-            "Authorization": f"apikey {api_key}"
-        }
-        
+        url = f"https://api.twelvedata.com/time_series?symbol={sym}&interval=1min&outputsize=15&apikey={api_key}"
+        headers = {"Authorization": f"apikey {api_key}"}
         response = requests.get(url, headers=headers).json()
         
         if "status" in response and response["status"] == "error":
@@ -62,7 +55,7 @@ def fetch_safe_live_data(sym, api_key):
             df_data["close"] = df_data["close"].astype(float)
             current_price = df_data["close"].iloc[0]
             
-            # حساب مؤشر RSI داخلي ذكي ومستقر
+            # حساب مؤشر RSI داخلي
             delta = df_data["close"].iloc[::-1].diff()
             gain = delta.where(delta > 0, 0).rolling(window=10, min_periods=1).mean().iloc[-1]
             loss = (-delta.where(delta < 0, 0)).rolling(window=10, min_periods=1).mean().iloc[-1]
@@ -70,19 +63,17 @@ def fetch_safe_live_data(sym, api_key):
             rsi_val = 50.0 if loss == 0 else 100 - (100 / (1 + (gain / loss)))
             return current_price, rsi_val, "success"
         else:
-            return None, None, "⚠️ استجابة فارغة، السيرفر ممتلئ، يرجى المحاولة مرة أخرى."
+            return None, None, "⚠️ استجابة فارغة، يرجى المحاولة بعد لحظات."
     except Exception as e:
         return None, None, f"❌ خطأ اتصال: {str(e)}"
 
-# حماية الـ Rate limit عبر زر يدوي متقن
 if st.button("🔄 اقتناص الإشارة الحية الآن"):
-    with st.spinner("جاري الاختراق الآمن للسيرفر وجلب السعر والإشارة الحالية..."):
+    with st.spinner("جاري جلب البيانات..."):
         price, rsi, status_message = fetch_safe_live_data(symbol, API_KEY)
 
     if status_message == "success" and price is not None:
         st.success(f"📡 متصل بنجاح! | **السعر الحالي:** `{price:.5f}` | **RSI المحسوب:** `{rsi:.2f}`")
         
-        # تصفية مناطق التشبع السعري والاتجاهات
         if rsi < 40:
             signal_type = "CALL 🟢 (شراء فوراً)"
             bg_class = "buy-bg"
@@ -100,22 +91,4 @@ if st.button("🔄 اقتناص الإشارة الحية الآن"):
     else:
         st.error(status_message)
 else:
-    st.info("💡 المنصة جاهزة ومحمية. اختر زوج العملات المطلوب ثم اضغط على الزر بالأعلى لجلب الإشارة الحية فوراً.")
-
-st.markdown("---")
-st.subheader("🕒 دفتر صفقاتك الحية المقتنصة اليوم")
-if 'live_history' not in st.session_state:
-    st.session_state.live_history = []
-
-col_c1, col_c2 = st.columns(2)
-with col_c1:
-    if st.button("✅ صفقات رابحة (WIN)"):
-        st.session_state.live_history.insert(0, {"توقيت الدخول": datetime.now().strftime("%H:%M:%S"), "الزوج": selected_display, "النتيجة": "WIN ✅", "الصافي": f"+${int(fixed_bet*0.85)}"})
-        st.rerun()
-with col_c2:
-    if st.button("❌ صفقات خاسرة (LOSS)"):
-        st.session_state.live_history.insert(0, {"توقيت الدخول": datetime.now().strftime("%H:%M:%S"), "الزوج": selected_display, "النتيجة": "LOSS ❌", "الصافي": f"-${int(fixed_bet)}"})
-        st.rerun()
-
-if len(st.session_state.live_history) > 0:
-    st.dataframe(pd.DataFrame(st.session_state.live_history), use_container_width=True)
+    st.info("💡 المنصة جاهزة وآمنة تماماً. اضغط على الزر بالأعلى لجلب الإشارة الحية فوراً.")
