@@ -1,6 +1,16 @@
+import os
+import sys
+
+# حيلة برمجية ذكية لصب المكتبات الناقصة ديريكت عند التشغيل
+try:
+    import requests
+    import pandas as pd
+except ImportError:
+    os.system(f"{sys.executable} -m pip install requests pandas")
+    import requests
+    import pandas as pd
+
 import streamlit as st
-import pandas as pd
-import requests
 from datetime import datetime
 
 # إعدادات واجهة المستخدم الاحترافية للأسواق الحية
@@ -40,7 +50,6 @@ symbol = pairs[selected_display]
 st.sidebar.header("💵 إدارة رأس المال")
 fixed_bet = st.sidebar.number_input("🎯 قيمة الصفقة الثابتة ($):", min_value=1, value=5)
 
-# دالة جلب البيانات مع إرسال الـ API Key بطريقة آمنة
 def fetch_safe_live_data(sym, api_key):
     try:
         url = f"https://api.twelvedata.com/time_series?symbol={sym}&interval=1min&outputsize=15&apikey={api_key}"
@@ -68,7 +77,7 @@ def fetch_safe_live_data(sym, api_key):
         return None, None, f"❌ خطأ اتصال: {str(e)}"
 
 if st.button("🔄 اقتناص الإشارة الحية الآن"):
-    with st.spinner("جاري جلب البيانات..."):
+    with st.spinner("جاري جلب البيانات الحية..."):
         price, rsi, status_message = fetch_safe_live_data(symbol, API_KEY)
 
     if status_message == "success" and price is not None:
