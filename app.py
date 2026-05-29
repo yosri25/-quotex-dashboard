@@ -20,10 +20,10 @@ st.markdown("""
 st.title("👑 QUOTEX AI LIVE ALGO (TWELVE DATA)")
 st.markdown("🔗 **إدارة الحساب:** `صفقات ثابتة آمنة 🛡️` | **مزود البيانات:** `Twelve Data Live 🟢` ")
 
-# 🔑 مفتاح الـ API الجديد والمفعل الخاص بك
-API_KEY = "Ecf6da3d1b1f45d19ddc3014737f8511"
+# 🔑 مفتاح الـ API الجديد والكامل بعد تفعيل الإيميل
+API_KEY = "A272cbbc1bee42a49d19a1582631cc92"
 
-# قائمة الـ 8 أزواج عملات المتاحة الحية متاعك كاملة
+# قائمة الـ 8 أزواج عملات الحية المتاحة كاملة
 pairs = {
     "EUR/USD (يورو / دولار)": "EUR/USD",
     "GBP/USD (باوند / دولار)": "GBP/USD",
@@ -41,13 +41,13 @@ symbol = pairs[selected_display]
 st.sidebar.header("💵 إدارة رأس المال")
 fixed_bet = st.sidebar.number_input("🎯 قيمة الصفقة الثابتة ($):", min_value=1, value=5)
 
-# دالة جلب البيانات مع فحص الأخطاء الدقيق
+# دالة جلب البيانات بنظام الـ Time Series الآمن بطلب واحد خفيف
 def fetch_fast_data(sym, api_key):
     try:
         url = f"https://api.twelvedata.com/time_series?symbol={sym}&interval=1min&outputsize=25&apikey={api_key}"
         response = requests.get(url).json()
         
-        # إذا السيرفر رجع خطأ واضح في المفتاح أو الليميت
+        # كشف الأخطاء المباشر من السيرفر
         if "status" in response and response["status"] == "error":
             return None, None, f"❌ خطأ من سيرفر البيانات: {response['message']}"
             
@@ -71,14 +71,14 @@ def fetch_fast_data(sym, api_key):
                 
             return current_price, rsi_val, "success"
         else:
-            return None, None, "⚠️ السيرفر رجع استجابة فارغة، تفقد حالة المفتاح الجديد."
+            return None, None, "⚠️ السيرفر رجع استجابة فارغة، تفقد حالة الحساب."
     except Exception as e:
         return None, None, f"❌ خطأ غير متوقع: {str(e)}"
 
 price, rsi, status_message = fetch_fast_data(symbol, API_KEY)
 
 if status_message == "success" and price is not None:
-    st.success(f"📡 متصل بنجاح بالمفتاح الجديد! | **السعر الحالي:** `{price:.5f}` | **RSI المحسوب لايف:** `{rsi:.2f}`")
+    st.success(f"📡 متصل بنجاح! | **السعر الحالي:** `{price:.5f}` | **RSI المحسوب لايف:** `{rsi:.2f}`")
     
     if rsi < 35:
         signal_type = "CALL 🟢 (شراء فوراً)"
@@ -98,7 +98,6 @@ if status_message == "success" and price is not None:
         
     st.markdown(f'<div class="signal-card {bg_class}">🎯 التوصية الحية: {signal_type} <br><span style="font-size:17px;">⏱️ مدة الصفقة: {duration} | 🕒 التوقيت: {datetime.now().strftime("%H:%M:%S")} <br> 📝 التحليل الفني: {action_note}</span></div>', unsafe_allow_html=True)
 else:
-    # عرض رسالة الخطأ الحقيقية القادمة من السيرفر مباشرة لتسهيل الكشف
     st.error(status_message)
 
 st.markdown("---")
