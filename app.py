@@ -1,160 +1,220 @@
-import os
-import sys
-
-try:
-    import requests
-    import pandas as pd
-    import numpy as np
-except ImportError:
-    os.system(f"{sys.executable} -m pip install requests pandas numpy")
-    import requests
-    import pandas as pd
-    import numpy as np
-
 import streamlit as st
-from datetime import datetime, timedelta
-import time
+import yfinance as yf
+import pandas as pd
+import numpy as np
+from datetime import datetime
 
-st.set_page_config(page_title="QUOTEX ALPHA PRO AI V2", page_icon="🦅", layout="wide")
+st.set_page_config(
+    page_title="Quotex Analyzer",
+    page_icon="📈",
+    layout="wide"
+)
 
-st.markdown("""
-<style>
-    .reportview-container { background: #06090e; }
-    .signal-card { padding: 30px; border-radius: 15px; text-align: center; font-size: 28px; font-weight: bold; margin-bottom: 25px; color: white; }
-    .buy-bg { background: linear-gradient(135deg, #00b09b, #96c93d); box-shadow: 0px 0px 30px #96c93d; border: 2px solid #fff; }
-    .sell-bg { background: linear-gradient(135deg, #cb2d3e, #ef473a); box-shadow: 0px 0px 30px #ef473a; border: 2px solid #fff; }
-    .wait-bg { background: linear-gradient(135deg, #232526, #414345); box-shadow: 0px 0px 15px #414345; }
-</style>
-""", unsafe_allow_html=True)
-
-st.title("🦅 QUOTEX ALPHA PRO AI V2 (REAL DATA ENGINE)")
-st.markdown("🔥 **نظام التحليل الجديد:** مدمج ببيانات حقيقية 100% | `EMA Trends` | `MACD Momentum` | `Real RSI` 🟢")
-
-ALPHA_API_KEY = "C46ZT9GEEM147ATS"
-
-pairs = {
-    "BTC/USD (بيتكوين 24/7)": "BTCUSD",
-    "ETH/USD (إيثيريوم 24/7)": "ETHUSD",
-    "EUR/USD (يورو / دولار)": "EURUSD",
-    "GBP/USD (باوند / دولار)": "GBPUSD",
-    "USD/JPY (دولار / ين)": "USDJPY",
-    "AUD/USD (أسترالي / دولار)": "AUDUSD",
-    "USD/CAD (دولار / كندي)": "USDCAD"
+PAIRS = {
+    "EUR/USD": "EURUSD=X",
+    "GBP/USD": "GBPUSD=X",
+    "USD/JPY": "JPY=X",
+    "USD/CAD": "CAD=X",
+    "EUR/JPY": "EURJPY=X"
 }
 
-selected_display = st.selectbox("🎯 اختر زوج العملة لتحليله بالبيانات الحقيقية:", list(pairs.keys()))
-symbol = pairs[selected_display]
+# --------------------
+# INDICATORS
+# --------------------
 
-st.sidebar.header("💵 إدارة المخاطر")
-fixed_bet = st.sidebar.number_input("🎯 قيمة الصفقة ($):", min_value=1, value=5)
-risk_mode = st.sidebar.selectbox("🔥 نمط الفلترة:", ["🛡️ Conservative (دقيق وآمن جداً)", "⚡ Aggressive (حركي سريع)"])
+def ema(series, period):
+    return series.ewm(span=period, adjust=False).mean()
 
-def fetch_real_market_data(sym, api_key):
-    try:
-        # سحب بيانات الشموع الحقيقية لدقيقة واحدة (Intraday M1) لإلغاء العشوائية تماماً
-        function_type = "CRYPTO_INTRADAY" if "USD" in sym and ("BTC" in sym or "ETH" in sym) else "FX_INTRADAY"
-        interval = "1min"
-        
-        if function_type == "CRYPTO_INTRADAY":
-            url = f"https://www.alphavantage.co/query?function={function_type}&symbol={sym[:3]}&market=USD&interval={interval}&apikey={api_key}"
-            time_key = "Time Series Crypto (1min)"
-        else:
-            url = f"https://www.alphavantage.co/query?function={function_type}&from_symbol={sym[:3]}&to_symbol={sym[3:]}&interval={interval} &apikey={api_key}"
-            time_key = "Time Series FX (1min)"
-            
-        res = requests.get(url, timeout=7).json()
-        
-        if time_key in res:
-            time_series = res[time_key]
-            df = pd.DataFrame.from_dict(time_series, orient='index').astype(float)
-            df = df.iloc[::-1] # ترتيب الشموع من الأقدم إلى الأحدث
-            df.columns = ['open', 'high', 'low', 'close']
-            
-            # 1. حساب المؤشرات الفنية الحقيقية 100%
-            df['EMA_20'] = df['close'].ewm(span=20, adjust=False).mean()
-            df['EMA_50'] = df['close'].ewm(span=50, adjust=False).mean()
-            
-            # حساب RSI حقيقي
-            delta = df['close'].diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-            df['RSI'] = 100 - (100 / (1 + (gain / loss)))
-            
-            # حساب MACD حقيقي
-            df['EMA_12'] = df['close'].ewm(span=12, adjust=False).mean()
-            df['EMA_26'] = df['close'].ewm(span=26, adjust=False).mean()
-            df['MACD'] = df['EMA_12'] - df['EMA_26']
-            df['Signal_Line'] = df['MACD'].ewm(span=9, adjust=False).mean()
-            
-            latest = df.iloc[-1]
-            prev = df.iloc[-2]
-            
-            return latest, prev, "success"
-        elif "Note" in res:
-            return None, None, "⚠️ السيرفر محدد بـ 5 طلبات في الدقيقة. انتظر 10 ثواني وأعد الضغط."
-        else:
-            return None, None, "⚠️ خطأ في تهيئة بيانات الزوج، جرب زوجاً آخر الآن."
-    except Exception as e:
-        return None, None, f"❌ خطأ اتصال بالسيرفر الرئيسي: {str(e)}"
+def rsi(close, period=14):
+    delta = close.diff()
 
-if st.button("🦅 اقتناص صفقة المحترفين بالبيانات الحقيقية"):
-    t0 = time.time()
-    with st.spinner("🧠 الـ AI يحلل الشموع الحقيقية الحالية ويحسب مؤشرات الاتجاه والزخم..."):
-        latest, prev, status = fetch_real_market_data(symbol, ALPHA_API_KEY)
-    t1 = time.time()
+    gain = delta.where(delta > 0, 0)
+    loss = -delta.where(delta < 0, 0)
 
-    if status == "success" and latest is not None:
-        st.success(f"📡 متصل بالبث البنكي الحقيقي! | ⏱️ سرعة الحساب: `{t1-t0:.2f} ثانية` | **السعر الحالي:** `{latest['close']:.5f}`")
-        
-        now_time = datetime.now()
-        target_candle_time = (now_time + timedelta(minutes=1)).strftime("%H:%M:00")
-        current_time_str = now_time.strftime("%H:%M:%S")
-        
-        # استخراج القيم الحقيقية
-        rsi_val = latest['RSI'] if not np.isnan(latest['RSI']) else 50.0
-        macd_val = latest['MACD']
-        sig_val = latest['Signal_Line']
-        trend_up = latest['EMA_20'] > latest['EMA_50']
-        
-        # خوارزمية دمج المؤشرات الحقيقية (Real Confluence Logic)
-        is_call = trend_up and rsi_val < 45 and macd_val > sig_val
-        is_put = (not trend_up) and rsi_val > 55 and macd_val < sig_val
-        
-        # فلتر إضافي للنمط الحركي السريع
-        if "Aggressive" in risk_mode:
-            if rsi_val < 40 or (macd_val > sig_val and prev['MACD'] <= prev['Signal_Line']):
-                is_call = True
-            elif rsi_val > 60 or (macd_val < sig_val and prev['MACD'] >= prev['Signal_Line']):
-                is_put = True
+    avg_gain = gain.rolling(period).mean()
+    avg_loss = loss.rolling(period).mean()
 
-        if is_call:
-            signal_type = "CALL 🟢 (شراء صعود)"
-            bg_class = "buy-bg"
-            action_note = f"🔥 تأكيد حقيقي: الاتجاه العام صاعد (EMA) والزخم يدعم الانفجار لأعلى (MACD). الـ RSI الحالي: {rsi_val:.2f}."
-        elif is_put:
-            signal_type = "PUT 🔴 (بيع هبوط)"
-            bg_class = "sell-bg"
-            action_note = f"🔥 تأكيد حقيقي: الاتجاه العام هابط (EMA) والزخم يدعم الانهيار لأسفل (MACD). الـ RSI الحالي: {rsi_val:.2f}."
-        else:
-            signal_type = "WAIT 🟡 (تريّث، غير زوج العملة)"
-            bg_class = "wait-bg"
-            action_note = f"مؤشر الـ RSI عند {rsi_val:.2f} والـ MACD مستقر. السوق في منطقة تذبذب كاذب، غير الزوج فوراً لقنص فرصة أنظف."
+    rs = avg_gain / avg_loss
 
-        if "WAIT" not in signal_type:
-            st.markdown(f"""
-            <div class="signal-card {bg_class}">
-                🎯 توصية الـ AI الحقيقية: {signal_type} <br>
-                <span style="font-size:22px; font-weight: bold; display:block; margin-top:12px; color: #fff; background: rgba(0,0,0,0.4); padding: 10px; border-radius: 8px;">
-                    ⏱️ توقيت الدخول الحتمي: {target_candle_time} بالضبط
-                </span>
-                <span style="font-size:15px; font-weight: normal; display:block; margin-top:10px;">
-                    🕒 وقت كبس الزر الحالي: {current_time_str} | ⌛ مدة الصفقة: 1 MIN <br> 📝 الفلترة الفنية: {action_note}
-                </span>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown(f'<div class="signal-card {bg_class}">🎯 توصية الـ AI الحقيقية: {signal_type} <br><span style="font-size:16px; font-weight: normal; display:block; margin-top:10px;">🕒 الوقت الحالي: {current_time_str} <br> 📝 تحليل سلوك السعر: {action_note}</span></div>', unsafe_allow_html=True)
+    return 100 - (100 / (1 + rs))
+
+def macd(close):
+    ema12 = ema(close, 12)
+    ema26 = ema(close, 26)
+
+    line = ema12 - ema26
+    signal = line.ewm(span=9, adjust=False).mean()
+
+    return line, signal
+
+def atr(df, period=14):
+
+    high_low = df["High"] - df["Low"]
+
+    high_close = np.abs(
+        df["High"] - df["Close"].shift()
+    )
+
+    low_close = np.abs(
+        df["Low"] - df["Close"].shift()
+    )
+
+    tr = pd.concat(
+        [high_low, high_close, low_close],
+        axis=1
+    ).max(axis=1)
+
+    return tr.rolling(period).mean()
+
+# --------------------
+# SIGNAL ENGINE
+# --------------------
+
+def analyze(df):
+
+    df["EMA20"] = ema(df["Close"], 20)
+    df["EMA50"] = ema(df["Close"], 50)
+    df["EMA200"] = ema(df["Close"], 200)
+
+    df["RSI"] = rsi(df["Close"])
+
+    df["MACD"], df["MACD_SIGNAL"] = macd(
+        df["Close"]
+    )
+
+    df["ATR"] = atr(df)
+
+    last = df.iloc[-1]
+
+    score = 0
+    reasons = []
+
+    # Trend
+    if (
+        last["EMA20"] >
+        last["EMA50"] >
+        last["EMA200"]
+    ):
+        score += 30
+        reasons.append("Trend Bullish")
+
+    elif (
+        last["EMA20"] <
+        last["EMA50"] <
+        last["EMA200"]
+    ):
+        score += 30
+        reasons.append("Trend Bearish")
+
+    # RSI
+    if 40 <= last["RSI"] <= 60:
+        score += 20
+        reasons.append("RSI Healthy")
+
+    # MACD
+    if last["MACD"] > last["MACD_SIGNAL"]:
+        score += 20
+        reasons.append("MACD Bullish")
+
     else:
-        st.error(status)
-else:
-    st.info("💡 البوت مدمج بالـ Real Time Data ومؤشرات الاتجاه والزخم الاحترافية. حدث الكود وفجر الأرباح!")
+        score += 20
+        reasons.append("MACD Bearish")
+
+    # ATR
+    if last["ATR"] > df["ATR"].mean():
+        score += 20
+        reasons.append("High Volatility")
+
+    signal = "WAIT"
+
+    if (
+        last["EMA20"] >
+        last["EMA50"] >
+        last["EMA200"]
+        and last["MACD"] >
+        last["MACD_SIGNAL"]
+    ):
+        signal = "CALL 🟢"
+
+    elif (
+        last["EMA20"] <
+        last["EMA50"] <
+        last["EMA200"]
+        and last["MACD"] <
+        last["MACD_SIGNAL"]
+    ):
+        signal = "PUT 🔴"
+
+    return signal, score, reasons
+
+# --------------------
+# UI
+# --------------------
+
+st.title("📈 QUOTEX ANALYZER")
+
+pair = st.selectbox(
+    "اختر الزوج",
+    list(PAIRS.keys())
+)
+
+duration = st.selectbox(
+    "مدة الصفقة",
+    [1, 2, 3, 5]
+)
+
+if st.button("تحليل"):
+
+    symbol = PAIRS[pair]
+
+    with st.spinner("جلب البيانات..."):
+
+        data = yf.download(
+            symbol,
+            period="5d",
+            interval="1m",
+            progress=False
+        )
+
+    if len(data) < 250:
+
+        st.error("لا توجد بيانات كافية")
+
+    else:
+
+        signal, score, reasons = analyze(data)
+
+        entry_time = datetime.now().strftime(
+            "%H:%M"
+        )
+
+        st.subheader(pair)
+
+        st.metric(
+            "الإشارة",
+            signal
+        )
+
+        st.metric(
+            "القوة",
+            f"{score}%"
+        )
+
+        st.metric(
+            "مدة الصفقة",
+            f"{duration} دقيقة"
+        )
+
+        st.metric(
+            "وقت الدخول",
+            entry_time
+        )
+
+        st.write("### أسباب القرار")
+
+        for r in reasons:
+            st.write("✅", r)
+
+        st.dataframe(
+            data.tail(10)
+        )
