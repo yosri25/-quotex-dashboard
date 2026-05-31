@@ -5,7 +5,7 @@ import numpy as np
 from datetime import datetime
 
 st.set_page_config(
-    page_title="Quotex Analyzer PRO",
+    page_title="Quotex Analyzer PRO v6",
     page_icon="📈",
     layout="wide"
 )
@@ -56,7 +56,7 @@ def atr(df, period=14):
 # --------------------
 
 def analyze(df):
-    # حساب المؤشرات وإضافتها للجدول بأمان
+    # حساب المؤشرات وإضافتها للجدول
     df["EMA20"] = ema(df["Close"], 20)
     df["EMA50"] = ema(df["Close"], 50)
     df["EMA200"] = ema(df["Close"], 200)
@@ -64,26 +64,29 @@ def analyze(df):
     df["MACD"], df["MACD_SIGNAL"] = macd(df["Close"])
     df["ATR"] = atr(df)
 
-    # ملء أي قيم فارغة ناتجة عن البدايات الحسابية
-    df = df.fillna(method='bfill')
+    # التحديث الجديد: تعبئة القيم الفارغة بالطريقة المتوافقة مع النسخ الحديثة لـ Pandas
+    df = df.bfill().ffill()
 
-    # سحب آخر شمعة كـ Series عادية لحساب الشروط بأمان
+    # سحب آخر شمعة بأمان
     last = df.iloc[-1]
     
     score = 0
     reasons = []
 
-    # استخراج القيم كأرقام فردية (float) لتفادي خطأ ValueError
-    e20 = float(last["EMA20"])
-    e50 = float(last["EMA50"])
-    e200 = float(last["EMA200"])
-    rsi_val = float(last["RSI"]) if not np.isnan(last["RSI"]) else 50.0
-    macd_val = float(last["MACD"])
-    macd_sig = float(last["MACD_SIGNAL"])
-    atr_val = float(last["ATR"])
-    atr_mean = float(df["ATR"].mean())
+    # تحويل القيم إلى أرقام فردية دقيقة لتفادي أخطاء المقارنة
+    e20 = float(last["EMA20"].iloc[0] if isinstance(last["EMA20"], pd.Series) else last["EMA20"])
+    e50 = float(last["EMA50"].iloc[0] if isinstance(last["EMA50"], pd.Series) else last["EMA50"])
+    e200 = float(last["EMA200"].iloc[0] if isinstance(last["EMA200"], pd.Series) else last["EMA200"])
+    rsi_val = float(last["RSI"].iloc[0] if isinstance(last["RSI"], pd.Series) else last["RSI"])
+    macd_val = float(last["MACD"].iloc[0] if isinstance(last["MACD"], pd.Series) else last["MACD"])
+    macd_sig = float(last["MACD_SIGNAL"].iloc[0] if isinstance(last["MACD_SIGNAL"], pd.Series) else last["MACD_SIGNAL"])
+    atr_val = float(last["ATR"].iloc[0] if isinstance(last["ATR"], pd.Series) else last["ATR"])
+    atr_mean = float(df["ATR"].mean().iloc[0] if isinstance(df["ATR"].mean(), pd.Series) else df["ATR"].mean())
 
-    # فلترة الاتجاه (Trend Analysis)
+    if np.isnan(rsi_val):
+        rsi_val = 50.0
+
+    # تحليل الاتجاه العام (Trend)
     if e20 > e50 > e200:
         score += 30
         reasons.append("Trend Bullish (اتجاه عام صاعد قوي)")
@@ -91,12 +94,12 @@ def analyze(df):
         score += 30
         reasons.append("Trend Bearish (اتجاه عام هابط قوي)")
 
-    # فلترة مؤشر الزخم RSI
+    # تحليل مؤشر الزخم RSI
     if 40 <= rsi_val <= 60:
         score += 20
         reasons.append(f"RSI Healthy ({rsi_val:.2f}) - منطقة زخم مستقرة")
 
-    # فلترة الماكد MACD
+    # تحليل تقاطع الماكد MACD
     if macd_val > macd_sig:
         score += 20
         reasons.append("MACD Bullish (تقاطع إيجابي للسيولة)")
@@ -104,17 +107,17 @@ def analyze(df):
         score += 20
         reasons.append("MACD Bearish (تقاطع سلبي للسيولة)")
 
-    # فلترة السيولة والتقلب ATR
+    # تحليل السيولة ATR
     if atr_val > atr_mean:
         score += 20
         reasons.append("High Volatility (حركة سوق نشطة وممتازة)")
 
-    # تحديد القرار النهائي بناءً على دمج المؤشرات
+    # القرار النهائي
     signal = "WAIT 🟡"
     if e20 > e50 > e200 and macd_val > macd_sig:
-        signal = "CALL 🟢 (صعود حتمي)"
+        signal = "CALL 🟢 (صعود)"
     elif e20 < e50 < e200 and macd_val < macd_sig:
-        signal = "PUT 🔴 (هبوط حتمي)"
+        signal = "PUT 🔴 (هبوط)"
 
     return signal, score, reasons
 
@@ -122,7 +125,7 @@ def analyze(df):
 # UI / INTERFACE
 # --------------------
 
-st.title("📈 QUOTEX INSTITUTIONAL ANALYZER (V5 STABLE)")
+st.title("📈 QUOTEX INSTITUTIONAL ANALYZER (V6 FIXED)")
 
 pair = st.selectbox("🎯 اختر زوج العملة المتاحة:", list(PAIRS.keys()))
 duration = st.selectbox("⏱️ مدة الصفقة الموصى بها:", [1, 2, 3, 5])
@@ -131,20 +134,17 @@ if st.button("🦅 ابدأ التحليل الفوري العالي الدقة"
     symbol = PAIRS[pair]
 
     with st.spinner("📡 جلب تنبيهات الأسعار الفورية من الخادم..."):
-        # جلب البيانات لمدة 5 أيام بفريم دقيقة واحدة
+        # سحب البيانات بفترة كافية لحساب المتوسطات
         data = yf.download(symbol, period="5d", interval="1m", progress=False)
 
     if data.empty:
-        st.error("❌ عذراً، السيرفر يرفض الاتصال حالياً. تأكد أن الأسواق مفتوحة (الفوركس يغلق السبت والأحد).")
+        st.error("❌ عذراً، لم يتم إرجاع بيانات من السيرفر. تأكد أن سوق الفوركس مفتوح حالياً.")
     else:
-        # خطوة حاسمة: تنظيف الأعمدة المركبة (Multi-index) الناتجة عن yfinance لتفادي أخطاء المقارنة
+        # تنظيف أعمدة الـ MultiIndex تماماً لتبسيط الجدول
         if isinstance(data.columns, pd.MultiIndex):
-            data.columns = data.columns.droplevel(1)
+            data.columns = data.columns.get_level_values(0)
         
-        if len(data) < 250:
-            st.warning(f"⚠️ حجم البيانات المتاحة ({len(data)} شمعة) أقل من المتوقع، لكن البوت سيقوم بالتحليل بناءً على الاستراتيجية التكيفية.")
-        
-        # تشغيل محرك التحليل بأمان
+        # تشغيل محرك التحليل المحمي
         try:
             signal, score, reasons = analyze(data)
             entry_time = datetime.now().strftime("%H:%M:%S")
@@ -159,7 +159,7 @@ if st.button("🦅 ابدأ التحليل الفوري العالي الدقة"
             with col3:
                 st.metric("🔥 قوة الإشارة الفنية", f"{score}%")
             with col4:
-                st.metric("⏱️ وقت كبس الزر", entry_time)
+                st.metric("⏱️ وقت دخول الصفقة", entry_time)
 
             st.write("### 📝 أسباب وتفاصيل القرار الفني:")
             for r in reasons:
@@ -169,4 +169,4 @@ if st.button("🦅 ابدأ التحليل الفوري العالي الدقة"
             st.dataframe(data.tail(10))
             
         except Exception as e:
-            st.error(f"⚠️ حدث خطأ أثناء الحساب الفني: {str(e)}. يرجى إعادة المحاولة بعد ثوانٍ.")
+            st.error(f"⚠️ حدث خطأ أثناء الحساب الفني: {str(e)}. يرجى إعادة المحاولة.")
